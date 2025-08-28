@@ -8,15 +8,11 @@
   <h1>按日期查看采集结果</h1>
   <a href="/" class="btn btn-secondary mb-3">返回首页</a>
   
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      <div class="alert alert-danger">
-        {% for message in messages %}
-          <p>{{ message }}</p>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
+  {% if error_message %}
+    <div class="alert alert-danger">
+      <p>{{ error_message }}</p>
+    </div>
+  {% endif %}
   
   <form method="get" action="/by_date" class="mb-4">
     <div class="row">
