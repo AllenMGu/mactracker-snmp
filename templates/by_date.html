@@ -3,6 +3,24 @@
 <head>
   <title>按日期查看采集结果</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    .sortable {
+      cursor: pointer;
+    }
+    .sortable:hover {
+      background-color: #f8f9fa;
+    }
+    .sort-asc::after {
+      content: " ↑";
+    }
+    .sort-desc::after {
+      content: " ↓";
+    }
+    .pagination {
+      margin: 0;
+    }
+  </style>
 </head>
 <body class="p-4">
   <h1>按日期查看采集结果</h1>
@@ -15,10 +33,14 @@
   {% endif %}
   
   <form method="get" action="/by_date" class="mb-4">
+    <input type="hidden" name="sort_by" value="{{ sort_by }}">
+    <input type="hidden" name="sort_order" value="{{ sort_order }}">
+    <input type="hidden" name="page" value="1">
+    
     <div class="row">
-      <div class="col-md-6">
+      <div class="col-md-3">
         <label for="dateSelect" class="form-label">选择日期</label>
-        <select class="form-select" id="dateSelect" name="date" onchange="this.form.submit()">
+        <select class="form-select" id="dateSelect" name="date">
           <option value="">-- 请选择日期 --</option>
           {% for date in dates %}
           <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
@@ -27,27 +49,153 @@
           {% endfor %}
         </select>
       </div>
+      
+      <div class="col-md-3">
+        <label for="deviceSelect" class="form-label">选择设备</label>
+        <select class="form-select" id="deviceSelect" name="device">
+          <option value="">-- 所有设备 --</option>
+          {% for device in devices %}
+          <option value="{{ device }}" {% if device == selected_device %}selected{% endif %}>
+            {{ device }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div class="col-md-2">
+        <label for="startHour" class="form-label">开始小时</label>
+        <input type="number" class="form-control" id="startHour" name="start_hour" 
+               min="0" max="23" placeholder="0" value="{{ start_hour }}">
+      </div>
+      
+      <div class="col-md-2">
+        <label for="endHour" class="form-label">结束小时</label>
+        <input type="number" class="form-control" id="endHour" name="end_hour" 
+               min="0" max="23" placeholder="23" value="{{ end_hour }}">
+      </div>
+      
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary">筛选</button>
+      </div>
     </div>
   </form>
   
   {% if selected_date %}
     <h2>{{ selected_date }} 的采集结果</h2>
+    {% if start_hour and end_hour %}
+      <p>时间范围: {{ start_hour }}:00 - {{ end_hour }}:59</p>
+    {% endif %}
+    {% if selected_device %}
+      <p>设备: {{ selected_device }}</p>
+    {% endif %}
+    
+    <!-- 结果统计和每页显示设置 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        共 {{ total_count }} 条记录，当前显示第 {{ (page-1)*per_page+1 }} 到 {{ [page*per_page, total_count]|min }} 条
+      </div>
+      <div>
+        <select class="form-select form-select-sm" onchange="changePerPage(this.value)" style="width: auto; display: inline-block;">
+          <option value="20" {% if per_page == 20 %}selected{% endif %}>每页20条</option>
+          <option value="50" {% if per_page == 50 %}selected{% endif %}>每页50条</option>
+          <option value="100" {% if per_page == 100 %}selected{% endif %}>每页100条</option>
+          <option value="200" {% if per_page == 200 %}selected{% endif %}>每页200条</option>
+        </select>
+      </div>
+    </div>
+    
     {% if results %}
     <table class="table table-striped">
-      <tr><th>设备</th><th>VLAN</th><th>MAC</th><th>端口</th><th>时间</th></tr>
-      {% for r in results %}
-      <tr>
-        <td>{{ r.device }}</td>
-        <td>{{ r.vlan }}</td>
-        <td>{{ r.mac }}</td>
-        <td>{{ r.port }}</td>
-        <td>{{ r.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-      </tr>
-      {% endfor %}
+      <thead>
+        <tr>
+          <th class="sortable {% if sort_by == 'device' %}{% if sort_order == 'asc' %}sort-asc{% else %}sort-desc{% endif %}{% endif %}" 
+              onclick="sortTable('device')">设备</th>
+          <th class="sortable {% if sort_by == 'vlan' %}{% if sort_order == 'asc' %}sort-asc{% else %}sort-desc{% endif %}{% endif %}" 
+              onclick="sortTable('vlan')">VLAN</th>
+          <th class="sortable {% if sort_by == 'mac' %}{% if sort_order == 'asc' %}sort-asc{% else %}sort-desc{% endif %}{% endif %}" 
+              onclick="sortTable('mac')">MAC</th>
+          <th class="sortable {% if sort_by == 'port' %}{% if sort_order == 'asc' %}sort-asc{% else %}sort-desc{% endif %}{% endif %}" 
+              onclick="sortTable('port')">端口</th>
+          <th class="sortable {% if sort_by == 'timestamp' %}{% if sort_order == 'asc' %}sort-asc{% else %}sort-desc{% endif %}{% endif %}" 
+              onclick="sortTable('timestamp')">时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td>{{ r.device }}</td>
+          <td>{{ r.vlan }}</td>
+          <td>{{ r.mac }}</td>
+          <td>{{ r.port }}</td>
+          <td>{{ r.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+    
+<!-- 分页控件 -->
+{% if total_pages > 1 %}
+<nav aria-label="采集结果分页">
+  <ul class="pagination">
+    <!-- 上一页 -->
+    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('by_date', date=selected_date, device=selected_device, start_hour=start_hour, end_hour=end_hour, sort_by=sort_by, sort_order=sort_order, per_page=per_page, page=page-1) }}">上一页</a>
+    </li>
+    
+    <!-- 页码 -->
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == page %}
+        <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+      {% elif p >= page-2 and p <= page+2 %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('by_date', date=selected_date, device=selected_device, start_hour=start_hour, end_hour=end_hour, sort_by=sort_by, sort_order=sort_order, per_page=per_page, page=p) }}">{{ p }}</a></li>
+      {% elif p == 1 or p == total_pages %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('by_date', date=selected_date, device=selected_device, start_hour=start_hour, end_hour=end_hour, sort_by=sort_by, sort_order=sort_order, per_page=per_page, page=p) }}">{{ p }}</a></li>
+      {% elif p == page-3 or p == page+3 %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+    {% endfor %}
+    
+    <!-- 下一页 -->
+    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('by_date', date=selected_date, device=selected_device, start_hour=start_hour, end_hour=end_hour, sort_by=sort_by, sort_order=sort_order, per_page=per_page, page=page+1) }}">下一页</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+    
     {% else %}
-    <div class="alert alert-info">该日期没有采集到数据</div>
+    <div class="alert alert-info">该筛选条件下没有采集到数据</div>
     {% endif %}
   {% endif %}
+  
+  <script>
+    
+    // 更改每页显示数量
+    function changePerPage(value) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('per_page', value);
+      url.searchParams.set('page', 1); // 重置到第一页
+      window.location.href = url.pathname + url.search;
+    }
+    
+    // 排序表格
+    function sortTable(column) {
+      const url = new URL(window.location.href);
+      const currentSortBy = url.searchParams.get('sort_by');
+      const currentSortOrder = url.searchParams.get('sort_order');
+      
+      if (column === currentSortBy) {
+        // 切换排序顺序
+        url.searchParams.set('sort_order', currentSortOrder === 'asc' ? 'desc' : 'asc');
+      } else {
+        // 设置新的排序字段，默认降序
+        url.searchParams.set('sort_by', column);
+        url.searchParams.set('sort_order', 'desc');
+      }
+      
+      url.searchParams.set('page', 1); // 排序后回到第一页
+      window.location.href = url.pathname + url.search;
+    }
+  </script>
 </body>
 </html>

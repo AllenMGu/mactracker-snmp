@@ -1,3 +1,4 @@
+<!-- cleanup.html 修改内容 -->
 <!doctype html>
 <html>
 <head>
@@ -21,13 +22,23 @@
     </div>
   </div>
   
-  <div class="card">
+  <div class="card mb-4">
     <div class="card-header">
-      清理操作
+      清理操作 - 仅清理旧数据
     </div>
     <div class="card-body">
       <p class="card-text">此操作将删除所有超过30天的MAC地址数据，此操作不可逆。</p>
-      <button id="cleanupBtn" class="btn btn-danger">清理旧数据</button>
+      <button id="cleanupBtn" class="btn btn-warning">清理旧数据</button>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div class="card-header text-white bg-danger">
+      危险操作 - 清理所有数据
+    </div>
+    <div class="card-body">
+      <p class="card-text text-danger"><strong>警告:</strong> 此操作将删除所有MAC地址数据，包括最新的数据，此操作不可逆且非常危险！</p>
+      <button id="cleanAllBtn" class="btn btn-danger">清理所有数据</button>
     </div>
   </div>
   
@@ -36,6 +47,7 @@
   </div>
   
   <script>
+    // 清理旧数据
     document.getElementById('cleanupBtn').addEventListener('click', function() {
       if (!confirm('确定要清理超过30天的旧数据吗？此操作不可撤销！')) {
         return;
@@ -46,13 +58,57 @@
       statusDiv.classList.remove('d-none');
       statusDiv.classList.remove('alert-success', 'alert-danger');
       statusDiv.classList.add('alert-info');
-      statusDiv.innerHTML = '开始清理数据，请稍候...';
+      statusDiv.innerHTML = '开始清理旧数据，请稍候...';
+      
+      // 使用FormData发送数据
+      const formData = new FormData();
+      formData.append('action', 'clean_old');
       
       fetch('/cleanup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // 轮询任务状态
+          const taskId = data.task_id;
+          checkTaskStatus(taskId);
+        } else {
+          statusDiv.classList.remove('alert-info');
+          statusDiv.classList.add('alert-danger');
+          statusDiv.innerHTML = `错误: ${data.error}`;
         }
+      })
+      .catch(error => {
+        statusDiv.classList.remove('alert-info');
+        statusDiv.classList.add('alert-danger');
+        statusDiv.innerHTML = `请求失败: ${error}`;
+      });
+    });
+    
+    // 清理所有数据
+    document.getElementById('cleanAllBtn').addEventListener('click', function() {
+      const confirmation = prompt('此操作将删除所有数据，不可恢复！请输入"DELETE ALL"确认操作:');
+      if (confirmation !== 'DELETE ALL') {
+        alert('确认文本不匹配，操作已取消');
+        return;
+      }
+      
+      const statusDiv = document.getElementById('taskStatus');
+      
+      statusDiv.classList.remove('d-none');
+      statusDiv.classList.remove('alert-success', 'alert-danger');
+      statusDiv.classList.add('alert-info');
+      statusDiv.innerHTML = '开始清理所有数据，请稍候...';
+      
+      // 使用FormData发送数据
+      const formData = new FormData();
+      formData.append('action', 'clean_all');
+      
+      fetch('/cleanup', {
+        method: 'POST',
+        body: formData
       })
       .then(response => response.json())
       .then(data => {
