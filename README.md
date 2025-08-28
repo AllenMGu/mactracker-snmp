@@ -8,3 +8,4 @@ docker-compose build --no-cache
 
 docker-compose up -d
 
+web to http:// server ip :8500
