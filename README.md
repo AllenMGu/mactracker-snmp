@@ -132,6 +132,4 @@ Patches, bug reports, and enhancements are welcome. Please open issues or pull r
 ## Contact
 For questions or help, open an issue on the repository or contact the project maintainer.
 
----
 
-谢谢！如果你需要我把 README 翻译成更简短的版本、生成 `docker-compose.yml` 示例、或者直接把这个 README 放进仓库并生成 release zip，请告诉我。
