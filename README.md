@@ -40,7 +40,7 @@ A Flask-based web application for automatically discovering and tracking MAC add
 ## Configuration 示例 (`config.yaml`)
 ```yaml
 snmp:
-  community: "cutia@2023"
+  community: "pulic"
   network: "10.80.1.0/24"
 
 db:
