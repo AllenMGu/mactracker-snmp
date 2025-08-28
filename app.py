@@ -4,9 +4,14 @@ from db import SessionLocal, MacEntry, LogEntry, tz_shanghai
 from collector import collect_snmp, collect_snmp_manual
 import datetime
 import threading
+import yaml
 from sqlalchemy import func, distinct
 
 app = Flask(__name__)
+
+# 读取配置文件
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
 
 # 存储后台采集任务的状态
 collection_tasks = {}
@@ -37,9 +42,16 @@ def clean_old_data():
 
 # 初始化调度器
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=collect_snmp, trigger="interval", minutes=10)
-# 添加每天凌晨1点执行的数据清理任务
-scheduler.add_job(func=clean_old_data, trigger="cron", hour=1, minute=0)
+
+# 从配置文件中获取定时设置
+interval_minutes = config["schedule"]["interval_minutes"]
+cleanup_hour = config["schedule"]["cleanup_hour"]
+cleanup_minute = config["schedule"]["cleanup_minute"]
+
+# 使用配置的定时设置
+scheduler.add_job(func=collect_snmp, trigger="interval", minutes=interval_minutes)
+# 添加每天指定时间执行的数据清理任务
+scheduler.add_job(func=clean_old_data, trigger="cron", hour=cleanup_hour, minute=cleanup_minute)
 scheduler.start()
 
 @app.route("/")

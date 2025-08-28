@@ -1,6 +1,14 @@
 snmp:
-  community: "public"
+  community: "cutia@2023"
   network: "10.80.1.0/24"
 
 db:
   url: sqlite:///data/mactracker.db
+
+# 新增定时任务配置
+schedule:
+  # 自动采集间隔（分钟）
+  interval_minutes: 60
+  # 数据清理时间（每天）
+  cleanup_hour: 1
+  cleanup_minute: 0
