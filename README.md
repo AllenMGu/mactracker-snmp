@@ -31,6 +31,7 @@ A Flask-based web application for automatically discovering and tracking MAC add
 2. Edit `config.yaml` (see example below).  
 3. Start with Docker Compose:
    ```bash
+   docker-compose build --no-cache
    docker-compose up -d
    ```
 4. Open the web UI at `http://<your-server-ip>:8500`.
