@@ -1,0 +1,6 @@
+snmp:
+  community: "cutia@2023"
+  network: "10.80.1.0/24"
+
+db:
+  url: sqlite:///data/mactracker.db

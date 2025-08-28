@@ -1,0 +1,7 @@
+flask
+apscheduler
+sqlalchemy
+easysnmp
+pyyaml
+pytz
+-i https://mirrors.aliyun.com/pypi/simple/

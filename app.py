@@ -1,0 +1,162 @@
+from flask import Flask, render_template, request, redirect, url_for, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from db import SessionLocal, MacEntry, LogEntry, tz_shanghai
+from collector import collect_snmp, collect_snmp_manual
+import datetime
+import threading
+from sqlalchemy import func, distinct
+
+app = Flask(__name__)
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=collect_snmp, trigger="interval", minutes=10)
+scheduler.start()
+
+# 存储后台采集任务的状态
+collection_tasks = {}
+
+@app.route("/")
+def index():
+    return render_template("search.html")
+
+@app.route("/search")
+def search():
+    q = request.args.get("q", "").lower()
+    
+    # 标准化 MAC 地址格式（移除分隔符并转换为小写）
+    normalized_q = q.replace(':', '').replace('-', '').lower()
+    
+    db = SessionLocal()
+    try:
+        # 查询时也标准化数据库中的 MAC 地址进行比较
+        results = db.query(MacEntry).filter(
+            func.replace(func.replace(MacEntry.mac, ':', ''), '-', '').ilike(f"%{normalized_q}%")
+        ).all()
+        
+        return render_template("search.html", results=results, query=q)
+    finally:
+        db.close()
+
+@app.route("/by_date")
+def by_date():
+    """按日期查看采集结果"""
+    date_str = request.args.get("date", "")
+    
+    db = SessionLocal()
+    try:
+        # 获取所有有数据的日期
+        dates = db.query(
+            func.date(MacEntry.timestamp).label('collection_date')
+        ).distinct().order_by(func.date(MacEntry.timestamp).desc()).all()
+        
+        results = []
+        selected_date = None
+        
+        if date_str:
+            try:
+                selected_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+                # 创建时区感知的日期时间范围
+                start_datetime = datetime.datetime.combine(selected_date, datetime.time.min)
+                end_datetime = datetime.datetime.combine(selected_date, datetime.time.max)
+                
+                # 转换为时区感知的时间
+                start_datetime = tz_shanghai.localize(start_datetime)
+                end_datetime = tz_shanghai.localize(end_datetime)
+                
+                results = db.query(MacEntry).filter(
+                    MacEntry.timestamp >= start_datetime,
+                    MacEntry.timestamp <= end_datetime
+                ).order_by(MacEntry.timestamp.desc()).all()
+                
+            except ValueError as e:
+                # 日期格式错误
+                app.logger.error(f"日期格式错误: {e}")
+                flash("日期格式错误，请使用 YYYY-MM-DD 格式")
+        
+        # 将日期对象转换为字符串，以便在模板中使用
+        date_strings = [d[0].strftime('%Y-%m-%d') if isinstance(d[0], datetime.date) else d[0] for d in dates]
+        selected_date_str = selected_date.strftime('%Y-%m-%d') if selected_date else None
+        
+        return render_template("by_date.html", 
+                              dates=date_strings, 
+                              results=results, 
+                              selected_date=selected_date_str)
+    except Exception as e:
+        app.logger.error(f"按日期查看时发生错误: {e}")
+        flash(f"发生错误: {e}")
+        return render_template("by_date.html", 
+                              dates=[], 
+                              results=[], 
+                              selected_date=None)
+    finally:
+        db.close()
+
+@app.route("/trigger")
+def trigger():
+    # 启动后台采集任务
+    task_id = str(datetime.datetime.now().timestamp())
+    collection_tasks[task_id] = {"status": "running", "message": "开始采集..."}
+    
+    # 在新线程中运行采集任务
+    thread = threading.Thread(target=run_collection_task, args=(task_id,))
+    thread.start()
+    
+    return redirect(url_for("logs"))
+
+@app.route("/manual_collect", methods=["POST"])
+def manual_collect():
+    network = request.form.get("network", "")
+    community = request.form.get("community", "")
+    
+    if not network or not community:
+        return jsonify({"error": "网络地址和community不能为空"}), 400
+    
+    # 启动后台采集任务
+    task_id = str(datetime.datetime.now().timestamp())
+    collection_tasks[task_id] = {
+        "status": "running", 
+        "message": f"开始手动采集: {network}",
+        "network": network,
+        "community": community
+    }
+    
+    # 在新线程中运行采集任务
+    thread = threading.Thread(target=run_manual_collection_task, args=(task_id, network, community))
+    thread.start()
+    
+    return jsonify({"success": True, "task_id": task_id})
+
+@app.route("/task_status/<task_id>")
+def task_status(task_id):
+    task = collection_tasks.get(task_id, {})
+    return jsonify(task)
+
+@app.route("/logs")
+def logs():
+    db = SessionLocal()
+    try:
+        logs = db.query(LogEntry).order_by(LogEntry.timestamp.desc()).limit(50).all()
+        return render_template("logs.html", logs=logs)
+    finally:
+        db.close()
+
+def run_collection_task(task_id):
+    try:
+        collect_snmp()
+        collection_tasks[task_id]["status"] = "completed"
+        collection_tasks[task_id]["message"] = "采集完成"
+    except Exception as e:
+        collection_tasks[task_id]["status"] = "failed"
+        collection_tasks[task_id]["message"] = f"采集失败: {str(e)}"
+
+def run_manual_collection_task(task_id, network, community):
+    try:
+        collect_snmp_manual(network, community)
+        collection_tasks[task_id]["status"] = "completed"
+        collection_tasks[task_id]["message"] = f"手动采集完成: {network}"
+    except Exception as e:
+        collection_tasks[task_id]["status"] = "failed"
+        collection_tasks[task_id]["message"] = f"手动采集失败: {str(e)}"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8500)

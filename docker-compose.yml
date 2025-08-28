@@ -1,0 +1,9 @@
+services:
+  mactracker:
+    build: .
+    container_name: mactracker
+    ports:
+      - "8500:8500"
+    volumes:
+      - ./data:/app/data
+    restart: always
